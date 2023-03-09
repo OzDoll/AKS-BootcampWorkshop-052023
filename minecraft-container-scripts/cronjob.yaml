@@ -1,0 +1,56 @@
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: myserviceaccount
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: myroles
+  namespace: default
+rules:
+- apiGroups: [""]
+  resources:
+  - namespaces
+  - pods
+  - cronjobs
+  verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: myrolebinding
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: myroles
+subjects:
+  - kind: ServiceAccount
+    name: myserviceaccount
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: myrestartcronjob
+  namespace: default
+spec:
+  concurrencyPolicy: Forbid
+  schedule: "0 11 * * 4" #Every Thursday at 5AM UTC-6.
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+          serviceAccountName: myserviceaccount
+          restartPolicy: Never
+          containers:
+            - name: kubectl
+              image: bitnami/kubectl
+              command: [ "/bin/sh", "-c" ]
+              args:
+                - 'kubectl delete pod $(kubectl get pod -l app=minecraft-server -o jsonpath="{.items[0].metadata.name}")'

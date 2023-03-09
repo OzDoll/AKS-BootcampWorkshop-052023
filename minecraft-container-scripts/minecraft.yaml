@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: storage-secret
+  namespace: default
+type: Opaque
+data:
+  azurestorageaccountname: xxxxxxxxxxxxxxxxxxxxxx==
+  azurestorageaccountkey: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx==
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pvname
+spec:
+  storageClassName: "scname"
+  capacity:
+    storage: 2Gi
+  accessModes:
+  - ReadWriteMany
+  storageClassName: scname
+  mountOptions:
+  - dir_mode=0750
+  - file_mode=0750
+  - uid=1001
+  - gid=1001
+  azureFile:
+    secretName: storage-secret
+    secretNamespace: default
+    shareName: sharename
+    readOnly: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvclaim
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: "scname"
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minecraft-server
+  labels:
+    app: minecraft-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minecraft-server
+  template:
+    metadata:
+      labels:
+        app: minecraft-server
+    spec:
+      restartPolicy: Always
+      containers:
+      - name: minecraft-server
+        image: docker.io/library/ubuntu:20.04
+        command: ["/bin/sh"]
+        args: ["-c", "useradd -u 1001 Minecraft ; sh /home/Minecraft/main-script.sh"]
+        ports:
+        - containerPort: 19132
+        - containerPort: 19133
+        volumeMounts:
+        - name: sharename
+          mountPath: /home/Minecraft
+      volumes:
+      - name: sharename
+        persistentVolumeClaim:
+          claimName: pvclaim
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mine-loadbalancer
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 19132
+    protocol: UDP
+    name: udp-19132
+  - port: 19133
+    protocol: UDP
+    name: dup-19133
+  selector:
+    app: minecraft-server
+  loadBalancerIP: xx.xx.xx.xx
